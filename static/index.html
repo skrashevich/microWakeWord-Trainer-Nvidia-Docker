@@ -248,6 +248,8 @@
         <span id="takeState" class="pill">Not recording</span>
       </p>
 
+      <p class="muted" id="takesSummary">Recorded: 0 / 0</p>
+
       <div id="takesList" class="muted"></div>
 
       <h4 style="margin-top: 18px; margin-bottom: 10px;">Training log</h4>
@@ -320,6 +322,7 @@
 
   let currentTake = 0;
   let takesPerSpeaker = 10;
+  let takesReceived = 0;
 
   // --- training poll (append mode; scrollback works) ---
   let trainingPollRunning = false;
@@ -354,6 +357,76 @@
     $("takeNum").textContent = String(currentTake);
     $("takeTotal").textContent = String(takesPerSpeaker);
     setPill($("speakerPill"), `Speaker ${currentSpeaker}/${speakersTotal}`);
+  }
+
+  function updateTakesSummary() {
+    const el = $("takesSummary");
+    if (!el) return;
+    const total = speakersTotal * takesPerSpeaker;
+    el.textContent = `Recorded: ${takesReceived}/${total}`;
+  }
+
+  function parseTakeFilename(name) {
+    const m = /^speaker(\d+)_take(\d+)\.wav$/i.exec(name || "");
+    if (!m) return null;
+    return { speaker: parseInt(m[1], 10), take: parseInt(m[2], 10) };
+  }
+
+  function deriveProgressFromTakes(takes, speakersTotal, takesPerSpeaker) {
+    const present = new Set();
+    for (const name of (takes || [])) {
+      const parsed = parseTakeFilename(name);
+      if (!parsed) continue;
+      if (parsed.speaker < 1 || parsed.speaker > speakersTotal) continue;
+      if (parsed.take < 1 || parsed.take > takesPerSpeaker) continue;
+      present.add(`${parsed.speaker}:${parsed.take}`);
+    }
+
+    const recorded = present.size;
+
+    for (let s = 1; s <= speakersTotal; s++) {
+      for (let t = 1; t <= takesPerSpeaker; t++) {
+        if (!present.has(`${s}:${t}`)) {
+          return { currentSpeaker: s, currentTake: t - 1, recorded, done: false };
+        }
+      }
+    }
+
+    return {
+      currentSpeaker: speakersTotal,
+      currentTake: takesPerSpeaker,
+      recorded,
+      done: true
+    };
+  }
+
+  function applySessionSnapshot(sess) {
+    if (!sess) return null;
+    if (sess.speakers_total !== undefined) {
+      speakersTotal = parseInt(sess.speakers_total || "1", 10);
+    }
+    if (sess.takes_per_speaker !== undefined) {
+      takesPerSpeaker = parseInt(sess.takes_per_speaker || "10", 10);
+    }
+
+    const takes = Array.isArray(sess.takes) ? sess.takes : [];
+    const progress = deriveProgressFromTakes(takes, speakersTotal, takesPerSpeaker);
+    const reported = parseInt(sess.takes_received || "0", 10);
+
+    currentSpeaker = progress.currentSpeaker;
+    currentTake = progress.currentTake;
+    takesReceived = Math.max(progress.recorded, isNaN(reported) ? 0 : reported);
+
+    refreshUI();
+    updateTakesSummary();
+
+    if (takesReceived > 0) {
+      $("takesList").textContent = `Existing recordings: ${takesReceived}/${speakersTotal * takesPerSpeaker}`;
+    } else {
+      $("takesList").textContent = "";
+    }
+
+    return progress;
   }
 
   // -------------------- mic lifecycle --------------------
@@ -496,7 +569,13 @@
       fd.append("take_index", String(currentTake));
       fd.append("file", wavBlob, `take_${String(currentTake).padStart(2,"0")}.wav`);
 
-      await api("/api/upload_take", { method:"POST", body: fd });
+      const uploadRes = await api("/api/upload_take", { method:"POST", body: fd });
+      if (uploadRes && typeof uploadRes.takes_received === "number") {
+        takesReceived = uploadRes.takes_received;
+      } else {
+        takesReceived += 1;
+      }
+      updateTakesSummary();
 
       $("takesList").textContent = `Saved ${currentTake}/${takesPerSpeaker} takes for speaker ${currentSpeaker}/${speakersTotal}`;
       setPill($("status"), `Saved speaker ${currentSpeaker} take ${currentTake}/${takesPerSpeaker}`, "ok");
@@ -767,10 +846,15 @@
 
       session = data;
 
-      currentSpeaker = 1;
-      currentTake = 0;
+      let progress = applySessionSnapshot(data);
+      if (!progress) {
+        currentSpeaker = 1;
+        currentTake = 0;
+        takesReceived = parseInt(data.takes_received || "0", 10);
+        refreshUI();
+        updateTakesSummary();
+      }
 
-      $("takesList").textContent = "";
       $("trainLog").textContent = "(no training started)";
 
       // Stop any previous poll loop cleanly
@@ -779,8 +863,6 @@
       logBuffer = "";
       lastChunk = "";
       seenAnyOutput = false;
-
-      refreshUI();
 
       await stopMicNow();
 
@@ -793,6 +875,17 @@
       setPill($("status"), "Ready", "ok");
       setPill($("speakerState"), "Waiting");
       setPill($("takeState"), "Not recording");
+
+      if (progress && progress.done) {
+        $("beginBtn").disabled = true;
+        setPill($("status"), "All takes recorded ✅", "ok");
+        setPill($("speakerState"), "All speakers done ✅", "ok");
+        setPill($("takeState"), "Done", "ok");
+      } else if (takesReceived > 0) {
+        setPill($("status"), "Loaded existing recordings", "ok");
+        setPill($("speakerState"), `Speaker ${currentSpeaker}/${speakersTotal}`);
+        setPill($("takeState"), "Ready", "ok");
+      }
     } catch (e) {
       console.error(e);
       setPill($("sessionPill"), "Session failed", "err");
@@ -808,8 +901,10 @@
       await api("/api/reset_recordings", {method:"POST"});
       currentSpeaker = 1;
       currentTake = 0;
+      takesReceived = 0;
       $("takesList").textContent = "";
       refreshUI();
+      updateTakesSummary();
       setPill($("status"), "Recordings reset", "ok");
     } catch (e) {
       alert("Reset failed: " + e.message);

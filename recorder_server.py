@@ -151,6 +151,14 @@ def _reset_personal_samples_dir():
             pass
 
 
+def _list_personal_samples() -> List[str]:
+    if not PERSONAL_DIR.exists():
+        return []
+    samples = [p.name for p in PERSONAL_DIR.glob("*.wav") if p.is_file()]
+    samples.sort()
+    return samples
+
+
 def _clear_training_log():
     """
     Truncate recorder_training.log for a fresh session.
@@ -577,14 +585,16 @@ def start_session(payload: Dict[str, Any]):
     speakers_total = max(1, min(10, speakers_total))
     takes_per_speaker = max(1, min(50, takes_per_speaker))
 
+    existing_takes = _list_personal_samples()
+
     with STATE_LOCK:
         STATE["raw_phrase"] = raw
         STATE["safe_word"] = safe
         STATE["lang"] = lang
         STATE["speakers_total"] = speakers_total
         STATE["takes_per_speaker"] = takes_per_speaker
-        STATE["takes_received"] = 0
-        STATE["takes"] = []
+        STATE["takes"] = existing_takes
+        STATE["takes_received"] = len(existing_takes)
 
     # _reset_personal_samples_dir()
 
@@ -599,6 +609,8 @@ def start_session(payload: Dict[str, Any]):
         "speakers_total": speakers_total,
         "takes_per_speaker": takes_per_speaker,
         "takes_total": speakers_total * takes_per_speaker,
+        "takes_received": len(existing_takes),
+        "takes": list(existing_takes),
         "personal_dir": str(PERSONAL_DIR),
         "data_dir": str(DATA_DIR),
     }
