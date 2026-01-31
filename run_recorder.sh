@@ -6,7 +6,7 @@ ROOTDIR="$(dirname "$(realpath "$0")")"
 # Training convention
 DATA_DIR="${DATA_DIR:-/data}"
 HOST="${REC_HOST:-0.0.0.0}"
-PORT="${REC_PORT:-8888}"
+PORT="${REC_PORT:-2704}"
 
 # Keep recorder deps separate from training venv
 VENV_DIR="${DATA_DIR}/.recorder-venv"

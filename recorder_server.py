@@ -4,6 +4,7 @@ import re
 import json
 import shutil
 import subprocess
+import shlex
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -22,17 +23,23 @@ DATA_DIR = Path(os.environ.get("DATA_DIR", "/data")).resolve()
 STATIC_DIR = Path(os.environ.get("STATIC_DIR", str(ROOT_DIR / "static"))).resolve()
 
 # Personal samples MUST land in /data/personal_samples for your CLI pipeline
-PERSONAL_DIR = Path(os.environ.get("PERSONAL_DIR", str(DATA_DIR / "personal_samples"))).resolve()
+PERSONAL_DIR = Path(
+    os.environ.get("PERSONAL_DIR", str(DATA_DIR / "personal_samples"))
+).resolve()
 
 # CLI folder inside repo
 CLI_DIR = Path(os.environ.get("CLI_DIR", str(ROOT_DIR / "cli"))).resolve()
 
-DATASET_CLEANUP_ARCHIVES = os.environ.get("REC_DATASET_CLEANUP_ARCHIVES", "false").lower() in ("1", "true", "yes", "y")
-DATASET_CLEANUP_INTERMEDIATE = os.environ.get("REC_DATASET_CLEANUP_INTERMEDIATE_FILES", "false").lower() in ("1", "true", "yes", "y")
+DATASET_CLEANUP_ARCHIVES = os.environ.get(
+    "REC_DATASET_CLEANUP_ARCHIVES", "false"
+).lower() in ("1", "true", "yes", "y")
+DATASET_CLEANUP_INTERMEDIATE = os.environ.get(
+    "REC_DATASET_CLEANUP_INTERMEDIATE_FILES", "false"
+).lower() in ("1", "true", "yes", "y")
 
 TRAIN_CMD = os.environ.get(
     "TRAIN_CMD",
-    f"source '{DATA_DIR}/.venv/bin/activate' && train_wake_word --data-dir '{DATA_DIR}'"
+    f"source '{DATA_DIR}/.venv/bin/activate' && train_wake_word --data-dir '{DATA_DIR}'",
 )
 
 TAKES_PER_SPEAKER_DEFAULT = int(os.environ.get("REC_TAKES_PER_SPEAKER", "10"))
@@ -41,7 +48,9 @@ SPEAKERS_TOTAL_DEFAULT = int(os.environ.get("REC_SPEAKERS_TOTAL", "1"))
 # Tail lines shown to UI
 TRAIN_LOG_TAIL_LINES = int(os.environ.get("REC_TRAIN_LOG_TAIL_LINES", "400"))
 # Safety cap for reads (bytes) to avoid giant file reads
-TRAIN_LOG_MAX_BYTES = int(os.environ.get("REC_TRAIN_LOG_MAX_BYTES", str(512 * 1024)))  # 512KB
+TRAIN_LOG_MAX_BYTES = int(
+    os.environ.get("REC_TRAIN_LOG_MAX_BYTES", str(512 * 1024))
+)  # 512KB
 
 app = FastAPI(title="microWakeWord Personal Recorder")
 
@@ -49,10 +58,62 @@ STATIC_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
+_RU_TRANSLIT = {
+    "а": "a",
+    "б": "b",
+    "в": "v",
+    "г": "g",
+    "д": "d",
+    "е": "e",
+    "ё": "yo",
+    "ж": "zh",
+    "з": "z",
+    "и": "i",
+    "й": "y",
+    "к": "k",
+    "л": "l",
+    "м": "m",
+    "н": "n",
+    "о": "o",
+    "п": "p",
+    "р": "r",
+    "с": "s",
+    "т": "t",
+    "у": "u",
+    "ф": "f",
+    "х": "kh",
+    "ц": "ts",
+    "ч": "ch",
+    "ш": "sh",
+    "щ": "shch",
+    "ъ": "",
+    "ы": "y",
+    "ь": "",
+    "э": "e",
+    "ю": "yu",
+    "я": "ya",
+}
+
+
+def detect_language(raw: str) -> str:
+    if re.search(r"[А-Яа-яЁё]", raw or ""):
+        return "ru"
+    return "en"
+
+
 def safe_name(raw: str) -> str:
     s = (raw or "").strip().lower()
-    s = re.sub(r"\s+", "_", s)
-    s = re.sub(r"[^a-z0-9_]+", "", s)
+    out = []
+    for ch in s:
+        if ch in _RU_TRANSLIT:
+            out.append(_RU_TRANSLIT[ch])
+        elif ch.isalnum():
+            out.append(ch)
+        elif ch.isspace() or ch in "-_":
+            out.append("_")
+        else:
+            out.append("_")
+    s = re.sub(r"_+", "_", "".join(out))
     s = re.sub(r"^_+|_+$", "", s)
     return s or "wakeword"
 
@@ -60,23 +121,21 @@ def safe_name(raw: str) -> str:
 STATE: Dict[str, Any] = {
     "raw_phrase": None,
     "safe_word": None,
-
+    "lang": None,
     "speakers_total": SPEAKERS_TOTAL_DEFAULT,
     "takes_per_speaker": TAKES_PER_SPEAKER_DEFAULT,
-
     "takes_received": 0,
     "takes": [],
-
     "training": {
         "running": False,
         "exit_code": None,
-        "log_lines": [],          # legacy in-memory tail (kept, but not relied on)
-        "log_path": None,         # path to recorder_training.log
+        "log_lines": [],  # legacy in-memory tail (kept, but not relied on)
+        "log_path": None,  # path to recorder_training.log
         "safe_word": None,
-
+        "lang": None,
         # prevent UI duplication when UI appends:
-        "last_sent_tail": [],      # last tail snapshot (list of lines)
-        "last_log_size": 0,        # detect truncation
+        "last_sent_tail": [],  # last tail snapshot (list of lines)
+        "last_log_size": 0,  # detect truncation
     },
 }
 
@@ -100,9 +159,13 @@ def _clear_training_log():
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
     with open(log_path, "w", encoding="utf-8") as lf:
-        lf.write("================================================================================\n")
+        lf.write(
+            "================================================================================\n"
+        )
         lf.write("===== New recorder session started =====\n")
-        lf.write("================================================================================\n")
+        lf.write(
+            "================================================================================\n"
+        )
         lf.flush()
 
     with STATE_LOCK:
@@ -186,7 +249,9 @@ def _ensure_training_venv(log_path: Path) -> None:
         raise RuntimeError(f"setup_python_venv failed (exit_code={rc})")
 
     if not activate.exists():
-        raise RuntimeError(f"setup_python_venv finished, but {activate} is still missing")
+        raise RuntimeError(
+            f"setup_python_venv finished, but {activate} is still missing"
+        )
 
 
 def _ensure_training_datasets(log_path: Path) -> None:
@@ -263,6 +328,7 @@ def _compute_new_lines(prev_tail: List[str], new_tail: List[str]) -> List[str]:
 
 # -------------------- output artifact normalization --------------------
 
+
 def _find_latest_output_pair(output_dir: Path) -> Tuple[Optional[Path], Optional[Path]]:
     """
     Find the most recently modified .tflite and its matching .json (same basename)
@@ -272,7 +338,9 @@ def _find_latest_output_pair(output_dir: Path) -> Tuple[Optional[Path], Optional
     if not output_dir.exists():
         return (None, None)
 
-    tflites = sorted(output_dir.glob("*.tflite"), key=lambda p: p.stat().st_mtime, reverse=True)
+    tflites = sorted(
+        output_dir.glob("*.tflite"), key=lambda p: p.stat().st_mtime, reverse=True
+    )
     if not tflites:
         return (None, None)
 
@@ -281,7 +349,9 @@ def _find_latest_output_pair(output_dir: Path) -> Tuple[Optional[Path], Optional
     if js.exists():
         return (tfl, js)
 
-    jsons = sorted(output_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    jsons = sorted(
+        output_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True
+    )
     return (tfl, jsons[0] if jsons else None)
 
 
@@ -357,11 +427,25 @@ def _normalize_output_artifacts(safe_word: str, log_path: Path) -> None:
             patched = _deep_replace_strings(data, old_tfl_name, new_tfl.name)
 
             # Patch common keys if present
-            for key in ("model", "model_file", "model_filename", "tflite", "tflite_file", "tflite_filename"):
-                if isinstance(patched, dict) and key in patched and isinstance(patched[key], str):
+            for key in (
+                "model",
+                "model_file",
+                "model_filename",
+                "tflite",
+                "tflite_file",
+                "tflite_filename",
+            ):
+                if (
+                    isinstance(patched, dict)
+                    and key in patched
+                    and isinstance(patched[key], str)
+                ):
                     patched[key] = new_tfl.name
 
-            new_js.write_text(json.dumps(patched, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            new_js.write_text(
+                json.dumps(patched, indent=2, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
             _append_train_log(f"✅ Patched JSON to reference: {new_tfl.name}")
     else:
         _append_train_log("⚠️ No .json found to patch (model renamed only)")
@@ -369,9 +453,12 @@ def _normalize_output_artifacts(safe_word: str, log_path: Path) -> None:
 
 # -------------------- training worker --------------------
 
-def _run_training_background(safe_word: str, allow_no_personal: bool):
+
+def _run_training_background(
+    safe_word: str, raw_phrase: str, lang: str, allow_no_personal: bool
+):
     with STATE_LOCK:
-        raw_phrase = STATE.get("raw_phrase") or ""
+        raw_phrase = raw_phrase or ""
 
     wake_word_title = _title_from_phrase(raw_phrase)
 
@@ -380,14 +467,19 @@ def _run_training_background(safe_word: str, allow_no_personal: bool):
         STATE["training"]["exit_code"] = None
         STATE["training"]["log_lines"] = []
         STATE["training"]["safe_word"] = safe_word
+        STATE["training"]["lang"] = lang
         STATE["training"]["last_sent_tail"] = []
         STATE["training"]["last_log_size"] = 0
         log_path = Path(str(DATA_DIR / "recorder_training.log"))
         STATE["training"]["log_path"] = str(log_path)
 
-    _append_train_log("================================================================================")
+    _append_train_log(
+        "================================================================================"
+    )
     _append_train_log("===== Recorder Training Run =====")
-    _append_train_log("================================================================================")
+    _append_train_log(
+        "================================================================================"
+    )
 
     try:
         with open(log_path, "a", encoding="utf-8") as lf:
@@ -402,10 +494,10 @@ def _run_training_background(safe_word: str, allow_no_personal: bool):
         _ensure_training_venv(log_path)
         _ensure_training_datasets(log_path)
 
-        if wake_word_title:
-            cmd_str = f"{TRAIN_CMD} '{safe_word}' '{wake_word_title}'"
-        else:
-            cmd_str = f"{TRAIN_CMD} '{safe_word}'"
+        phrase_q = shlex.quote(raw_phrase or safe_word)
+        safe_q = shlex.quote(safe_word)
+        lang_q = shlex.quote(lang or "en")
+        cmd_str = f"{TRAIN_CMD} --phrase={phrase_q} --id={safe_q} --lang={lang_q}"
 
         env = os.environ.copy()
         env["MWW_ALLOW_NO_PERSONAL"] = "true" if allow_no_personal else "false"
@@ -464,12 +556,23 @@ def index():
 def start_session(payload: Dict[str, Any]):
     raw = (payload.get("phrase") or "").strip()
     if not raw:
-        return JSONResponse({"ok": False, "error": "phrase is required"}, status_code=400)
+        return JSONResponse(
+            {"ok": False, "error": "phrase is required"}, status_code=400
+        )
 
     safe = safe_name(raw)
 
     speakers_total = int(payload.get("speakers_total") or SPEAKERS_TOTAL_DEFAULT)
-    takes_per_speaker = int(payload.get("takes_per_speaker") or TAKES_PER_SPEAKER_DEFAULT)
+    takes_per_speaker = int(
+        payload.get("takes_per_speaker") or TAKES_PER_SPEAKER_DEFAULT
+    )
+    lang = (payload.get("lang") or "auto").strip().lower()
+    if lang not in {"auto", "en", "ru"}:
+        return JSONResponse(
+            {"ok": False, "error": "lang must be one of: auto, en, ru"}, status_code=400
+        )
+    if lang == "auto":
+        lang = detect_language(raw)
 
     speakers_total = max(1, min(10, speakers_total))
     takes_per_speaker = max(1, min(50, takes_per_speaker))
@@ -477,12 +580,13 @@ def start_session(payload: Dict[str, Any]):
     with STATE_LOCK:
         STATE["raw_phrase"] = raw
         STATE["safe_word"] = safe
+        STATE["lang"] = lang
         STATE["speakers_total"] = speakers_total
         STATE["takes_per_speaker"] = takes_per_speaker
         STATE["takes_received"] = 0
         STATE["takes"] = []
 
-    _reset_personal_samples_dir()
+    # _reset_personal_samples_dir()
 
     # Always wipe log on start_session (even if same wakeword)
     _clear_training_log()
@@ -491,6 +595,7 @@ def start_session(payload: Dict[str, Any]):
         "ok": True,
         "raw_phrase": raw,
         "safe_word": safe,
+        "lang": lang,
         "speakers_total": speakers_total,
         "takes_per_speaker": takes_per_speaker,
         "takes_total": speakers_total * takes_per_speaker,
@@ -506,6 +611,7 @@ def get_session():
             "ok": True,
             "raw_phrase": STATE["raw_phrase"],
             "safe_word": STATE["safe_word"],
+            "lang": STATE.get("lang"),
             "speakers_total": STATE["speakers_total"],
             "takes_per_speaker": STATE["takes_per_speaker"],
             "takes_received": STATE["takes_received"],
@@ -526,13 +632,22 @@ async def upload_take(
         takes_per_speaker = int(STATE["takes_per_speaker"])
 
     if not safe_word:
-        return JSONResponse({"ok": False, "error": "No active session. Call /api/start_session first."}, status_code=400)
+        return JSONResponse(
+            {"ok": False, "error": "No active session. Call /api/start_session first."},
+            status_code=400,
+        )
 
     if speaker_index < 1 or speaker_index > speakers_total:
-        return JSONResponse({"ok": False, "error": f"speaker_index must be 1..{speakers_total}"}, status_code=400)
+        return JSONResponse(
+            {"ok": False, "error": f"speaker_index must be 1..{speakers_total}"},
+            status_code=400,
+        )
 
     if take_index < 1 or take_index > takes_per_speaker:
-        return JSONResponse({"ok": False, "error": f"take_index must be 1..{takes_per_speaker}"}, status_code=400)
+        return JSONResponse(
+            {"ok": False, "error": f"take_index must be 1..{takes_per_speaker}"},
+            status_code=400,
+        )
 
     PERSONAL_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -541,7 +656,9 @@ async def upload_take(
 
     data = await file.read()
     if not data or len(data) < 44:
-        return JSONResponse({"ok": False, "error": "Empty/invalid file"}, status_code=400)
+        return JSONResponse(
+            {"ok": False, "error": "Empty/invalid file"}, status_code=400
+        )
 
     out_path.write_bytes(data)
 
@@ -560,6 +677,8 @@ def train_now(payload: Dict[str, Any] = None):
 
     with STATE_LOCK:
         safe_word = STATE["safe_word"]
+        raw_phrase = STATE.get("raw_phrase") or safe_word
+        lang = STATE.get("lang") or detect_language(raw_phrase)
         takes_received = int(STATE["takes_received"])
         speakers_total = int(STATE["speakers_total"])
         takes_per_speaker = int(STATE["takes_per_speaker"])
@@ -568,10 +687,14 @@ def train_now(payload: Dict[str, Any] = None):
     takes_total = speakers_total * takes_per_speaker
 
     if training_running:
-        return JSONResponse({"ok": False, "error": "Training already running"}, status_code=400)
+        return JSONResponse(
+            {"ok": False, "error": "Training already running"}, status_code=400
+        )
 
     if not safe_word:
-        return JSONResponse({"ok": False, "error": "No active session"}, status_code=400)
+        return JSONResponse(
+            {"ok": False, "error": "No active session"}, status_code=400
+        )
 
     min_required = max(1, min(3, takes_total))
 
@@ -599,7 +722,11 @@ def train_now(payload: Dict[str, Any] = None):
             status_code=400,
         )
 
-    t = threading.Thread(target=_run_training_background, args=(safe_word, allow_no_personal), daemon=True)
+    t = threading.Thread(
+        target=_run_training_background,
+        args=(safe_word, raw_phrase, lang, allow_no_personal),
+        daemon=True,
+    )
     t.start()
 
     return {

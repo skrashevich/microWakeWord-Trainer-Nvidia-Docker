@@ -4,8 +4,27 @@ set -e
 PROGPATH=$(realpath "$0")
 PROGDIR=$(dirname "${PROGPATH}")
 
-KNOWN_ARGS=( training-steps samples data-dir )
+ARG_LANG_PRESENT=false
+for a in "$@"; do
+    case "$a" in
+        --lang|--lang=*) ARG_LANG_PRESENT=true ;;
+    esac
+done
+
+ORIG_LANG="${LANG-}"
+KNOWN_ARGS=( training-steps samples data-dir lang )
 source "${PROGDIR}/shell.functions"
+MWW_LANG_INPUT=""
+if ${ARG_LANG_PRESENT}; then
+    MWW_LANG_INPUT="${LANG-}"
+fi
+
+if [ -n "${ORIG_LANG}" ] ; then
+    export LANG="${ORIG_LANG}"
+else
+    unset LANG || :
+fi
+
 WAKE_WORD="${POSITIONAL_ARGS[0]}"
 
 if [ ${#UNKNOWN_ARGS[@]} -gt 0 ] ; then
@@ -16,6 +35,7 @@ fi
 if [ "${HELP}" == "true" ] || [ -z "${WAKE_WORD}" ] ; then
     cat <<EOF >&2
 Usage: $0 [ --samples=<samples> ] [ --training-steps=<steps> ]
+          [ --lang=<lang> ]
           <wake_word> [ <wake_word_title> ]
 
        $0 -h/--help
@@ -50,6 +70,11 @@ fi
 
 # shellcheck source=/dev/null
 source "${DATA_DIR}/.venv/bin/activate"
+
+TARGET_LANG="$(echo "${MWW_LANG_INPUT:-${MWW_LANG:-en}}" | tr '[:upper:]' '[:lower:]')"
+if [ -z "${TARGET_LANG}" ] ; then
+    TARGET_LANG="en"
+fi
 
 check_directories() {
     for d in "$@" ; do
@@ -306,10 +331,10 @@ cat <<-EOF > "${json_path}"
 {
     "type": "micro",
     "wake_word": "${WAKE_WORD_TITLE}",
-    "author": "Tater Totterson",
-    "website": "https://github.com/TaterTotterson/microWakeWord-Trainer-Nvidia-Docker.git",
+    "author": "microWakeWord-Trainer",
+    "website": "https://github.com/skrashevich/microWakeWord-Trainer-Nvidia-Docker.git",
     "model": "${tflite_filename}",
-    "trained_languages": ["en"],
+    "trained_languages": ["${TARGET_LANG}"],
     "version": 2,
     "micro": {
         "probability_cutoff": 0.97,

@@ -22,7 +22,7 @@ Install directly from the Unraid App Store with a one-click template.
 ### Pull the Docker Image
 
 ```bash
-docker pull ghcr.io/tatertotterson/microwakeword:latest
+docker pull ghcr.io/skrashevich/microwakeword:latest
 ```
 
 ---
@@ -32,14 +32,14 @@ docker pull ghcr.io/tatertotterson/microwakeword:latest
 ```bash
 docker run -d \
   --gpus all \
-  -p 8888:8888 \
+  -p 2704:2704 \
   -v $(pwd):/data \
-  ghcr.io/tatertotterson/microwakeword:latest
+  ghcr.io/skrashevich/microwakeword:latest
 ```
 
 **What these flags do:**
 - `--gpus all` → Enables GPU acceleration  
-- `-p 8888:8888` → Exposes the Recorder + Trainer WebUI  
+- `-p 2704:2704` → Exposes the Recorder + Trainer WebUI  
 - `-v $(pwd):/data` → Persists all models, datasets, and cache  
 
 ---
@@ -48,7 +48,7 @@ docker run -d \
 
 Open your browser and go to:
 
-👉 **http://localhost:8888**
+👉 **http://localhost:2704**
 
 You’ll see the **microWakeWord Recorder & Trainer UI**.
 
@@ -94,6 +94,27 @@ personal_samples/
   speaker02_take01.wav
   ...
 ```
+
+---
+
+## 🇷🇺 Russian Wake Words
+
+For Russian phrases, select **Русский** (or keep **Auto**) in the Web UI.
+
+If you train via CLI inside the container, use:
+
+```bash
+train_wake_word --phrase "привет дом" --lang ru
+```
+
+You can also set a safe ASCII id for filenames:
+
+```bash
+train_wake_word --phrase "привет дом" --lang ru --id privet_dom
+```
+
+By default, Russian TTS uses Piper voice **ru_RU-dmitri-medium**.  
+The model is downloaded automatically the first time it is needed.
 
 ---
 

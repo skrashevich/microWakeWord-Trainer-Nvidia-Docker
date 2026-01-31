@@ -1,2 +1,11 @@
 personal_samples/*
 .DS_Store
+__pycache__
+.venv
+.recorder-venv
+generated_samples/*
+*.log
+audioset
+audioset_16k
+mit_rirs
+MIT_RIR_Audio.zip

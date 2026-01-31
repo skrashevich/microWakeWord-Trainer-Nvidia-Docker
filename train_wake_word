@@ -5,8 +5,29 @@ PROGPATH=$(realpath "$0")
 PROGDIR=$(dirname "${PROGPATH}")
 CLIDIR="${PROGDIR}/cli"
 
-KNOWN_ARGS=( samples batch-size training-steps data-dir cleanup-work-dir )
+ARG_LANG_PRESENT=false
+for a in "$@"; do
+    case "$a" in
+        --lang|--lang=*) ARG_LANG_PRESENT=true ;;
+    esac
+done
+
+ORIG_LANG="${LANG-}"
+KNOWN_ARGS=( samples batch-size training-steps data-dir cleanup-work-dir lang phrase id )
 source "${CLIDIR}/shell.functions"
+MWW_LANG_INPUT=""
+if ${ARG_LANG_PRESENT}; then
+    MWW_LANG_INPUT="${LANG-}"
+fi
+MWW_PHRASE_INPUT="${PHRASE-}"
+MWW_ID_INPUT="${ID-}"
+
+if [ -n "${ORIG_LANG}" ] ; then
+    export LANG="${ORIG_LANG}"
+else
+    unset LANG || :
+fi
+
 WAKE_WORD=${POSITIONAL_ARGS[0]}
 
 if [ ${#UNKNOWN_ARGS[@]} -gt 0 ] ; then
@@ -14,10 +35,11 @@ if [ ${#UNKNOWN_ARGS[@]} -gt 0 ] ; then
     HELP=true
 fi
 
-if [ "${HELP}" == "true" ] || [ -z "${WAKE_WORD}" ] ; then
+if [ "${HELP}" == "true" ] || { [ -z "${WAKE_WORD}" ] && [ -z "${MWW_PHRASE_INPUT}" ] ; } ; then
     cat <<EOF >&2
 Usage: train_wake_word [ --samples=<samples> ] [ --batch-size=<batch_size> ]
                        [ --training-steps=<steps> ] [ --cleanup-work-dir ]
+                       [ --phrase=<phrase> ] [ --id=<safe_id> ] [ --lang=<lang> ]
                        <wake_word> [ <wake_word_title> ]
 
 Options:
@@ -35,8 +57,16 @@ Options:
 --cleanup-work-dir:   Delete the /data/work directory after successful training.
                       Default: false
 
+--phrase:             Raw wake word phrase (used for TTS generation + metadata).
+                      Optional.
+
+--id:                 Safe ASCII id used for filenames/models. If omitted, it
+                      is generated from the phrase (with RU transliteration).
+
+--lang:               Language for TTS + metadata: auto|en|ru (default: auto).
+
 <wake_word>           The word to train spelled phonetically.
-                      Required.
+                      Required unless --phrase is provided.
 
 <wake_word_title>     An optional pretty name to save to the json metadata file.
                       Default: The wake word with individual words capitalized
@@ -52,14 +82,104 @@ source "${DATA_DIR}/.venv/bin/activate"
 cd "${DATA_DIR}"
 mkdir -p "${DATA_DIR}/work" || :
 
-[ ${#POSITIONAL_ARGS} -eq 2 ] && WAKE_WORD_TITLE="${POSITIONAL_ARGS[1]}" || :
+RAW_PHRASE="${MWW_PHRASE_INPUT}"
+SAFE_ID_INPUT="${MWW_ID_INPUT}"
+WAKE_WORD_TITLE=""
 
-if [ ! -v WAKE_WORD_TITLE ] ; then
-    declare -a WWNA=( ${WAKE_WORD//[^a-zA-Z0-9]/ } )
-    WAKE_WORD_TITLE="${WWNA[*]^}"
-elif [ -z "$WAKE_WORD_TITLE" ] ; then
-    WAKE_WORD_TITLE="$WAKE_WORD"
+if [ -n "${RAW_PHRASE}" ] ; then
+    if [ -z "${SAFE_ID_INPUT}" ] && [ ${#POSITIONAL_ARGS[@]} -ge 1 ] ; then
+        SAFE_ID_INPUT="${POSITIONAL_ARGS[0]}"
+        [ ${#POSITIONAL_ARGS[@]} -ge 2 ] && WAKE_WORD_TITLE="${POSITIONAL_ARGS[1]}"
+    elif [ ${#POSITIONAL_ARGS[@]} -ge 1 ] ; then
+        WAKE_WORD_TITLE="${POSITIONAL_ARGS[0]}"
+    fi
+else
+    RAW_PHRASE="${POSITIONAL_ARGS[0]}"
+    [ ${#POSITIONAL_ARGS[@]} -ge 2 ] && WAKE_WORD_TITLE="${POSITIONAL_ARGS[1]}"
 fi
+
+if [ -z "${RAW_PHRASE}" ] ; then
+    echo "ERROR: Missing wake word. Provide <wake_word> or --phrase." >&2
+    exit 1
+fi
+
+TARGET_LANG="$(echo "${MWW_LANG_INPUT:-auto}" | tr '[:upper:]' '[:lower:]')"
+if [ -z "${TARGET_LANG}" ] ; then
+    TARGET_LANG="auto"
+fi
+
+if [ "${TARGET_LANG}" = "auto" ] ; then
+    TARGET_LANG="$(
+        python - <<'PY' "${RAW_PHRASE}"
+import re, sys
+phrase = sys.argv[1] if len(sys.argv) > 1 else ""
+print("ru" if re.search(r"[А-Яа-яЁё]", phrase) else "en")
+PY
+    )"
+fi
+
+case "${TARGET_LANG}" in
+    en|ru) : ;;
+    *) echo "ERROR: Unsupported --lang: ${TARGET_LANG} (use en|ru|auto)" >&2; exit 1 ;;
+esac
+
+if [ -n "${SAFE_ID_INPUT}" ] ; then
+    SAFE_ID="$(
+        python - <<'PY' "${SAFE_ID_INPUT}"
+import re, sys
+raw = sys.argv[1] if len(sys.argv) > 1 else ""
+slug = re.sub(r"[^a-z0-9_]+", "", re.sub(r"\s+", "_", raw.lower()))
+print(slug)
+PY
+    )"
+else
+    SAFE_ID="$(
+        python - <<'PY' "${RAW_PHRASE}"
+import hashlib, re, sys
+phrase = sys.argv[1] if len(sys.argv) > 1 else ""
+trans = {
+  "а":"a","б":"b","в":"v","г":"g","д":"d","е":"e","ё":"yo","ж":"zh","з":"z","и":"i","й":"y",
+  "к":"k","л":"l","м":"m","н":"n","о":"o","п":"p","р":"r","с":"s","т":"t","у":"u","ф":"f",
+  "х":"kh","ц":"ts","ч":"ch","ш":"sh","щ":"shch","ъ":"","ы":"y","ь":"","э":"e","ю":"yu","я":"ya",
+}
+out = []
+for ch in phrase.lower():
+  if ch in trans:
+    out.append(trans[ch])
+  elif ch.isalnum():
+    out.append(ch)
+  elif ch.isspace() or ch in "-_":
+    out.append("_")
+  else:
+    out.append("_")
+slug = re.sub(r"_+", "_", "".join(out)).strip("_")
+if not slug:
+  h = hashlib.sha1(phrase.encode("utf-8")).hexdigest()[:8]
+  slug = f"wakeword_{h}"
+print(slug)
+PY
+    )"
+fi
+
+if [ -z "${SAFE_ID}" ] ; then
+    SAFE_ID="wakeword"
+fi
+
+export MWW_LANG="${TARGET_LANG}"
+export MWW_PHRASE="${RAW_PHRASE}"
+export MWW_SAFE_ID="${SAFE_ID}"
+
+if [ -z "${WAKE_WORD_TITLE}" ] ; then
+    if [ "${TARGET_LANG}" = "ru" ] ; then
+        WAKE_WORD_TITLE="${RAW_PHRASE}"
+    else
+        declare -a WWNA=( ${RAW_PHRASE//[^a-zA-Z0-9]/ } )
+        WAKE_WORD_TITLE="${WWNA[*]^}"
+        [ -n "${WAKE_WORD_TITLE}" ] || WAKE_WORD_TITLE="${RAW_PHRASE}"
+    fi
+fi
+
+WAKE_WORD="${SAFE_ID}"
 
 printf "%-80s\n" "=" | tr ' ' "="
 echo "===== Running '${WAKE_WORD}(${WAKE_WORD_TITLE})' generation, augmentation and training ====="
@@ -88,6 +208,7 @@ export GRPC_VERBOSITY=ERROR
 "${CLIDIR}/wake_word_sample_generator" \
     --samples=${SAMPLES} \
     --batch-size=${BATCH_SIZE} \
+    --lang=${TARGET_LANG} \
     --data-dir="${DATA_DIR}" "${WAKE_WORD}"
 
 POST_GEN_TS=$EPOCHSECONDS
@@ -113,6 +234,7 @@ POST_AUGMENT_TS=$EPOCHSECONDS
 "${CLIDIR}/wake_word_sample_trainer" \
     --samples=${SAMPLES} \
     --training-steps=${TRAINING_STEPS} \
+    --lang=${TARGET_LANG} \
     --data-dir="${DATA_DIR}" \
     "${WAKE_WORD}" "${WAKE_WORD_TITLE}"
 
