@@ -7,14 +7,6 @@ Train **microWakeWord** detection models using a simple **web-based recorder + t
 
 No Jupyter notebooks required. No manual cell execution. Just record your voice (optional) and train.
 
----
-
-<img width="100" height="44" alt="unraid_logo_black-339076895" src="https://github.com/user-attachments/assets/87351bed-3321-4a43-924f-fecf2e4e700f" />
-
-**microWakeWord_Trainer-Nvidia** is available in the **Unraid Community Apps** store.
-Install directly from the Unraid App Store with a one-click template.
-
----
 
 <img width="100" height="56" alt="unraid_logo_black-339076895" src="https://github.com/user-attachments/assets/bf959585-ae13-4b4d-ae62-4202a850d35a" />
 
@@ -22,7 +14,7 @@ Install directly from the Unraid App Store with a one-click template.
 ### Pull the Docker Image
 
 ```bash
-docker pull ghcr.io/skrashevich/microwakeword:latest
+docker pull ghcr.io/skrashevich/microwakeword-trainer-nvidia-docker:latest
 ```
 
 ---
@@ -34,7 +26,7 @@ docker run -d \
   --gpus all \
   -p 2704:2704 \
   -v $(pwd):/data \
-  ghcr.io/skrashevich/microwakeword:latest
+  ghcr.io/skrashevich/microwakeword-trainer-nvidia-docker:latest
 ```
 
 **What these flags do:**
