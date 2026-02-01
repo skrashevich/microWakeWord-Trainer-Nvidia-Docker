@@ -1,5 +1,5 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -172,8 +172,8 @@
       <div class="brand">
         <div class="logo"></div>
         <div>
-          <h2>🎙️ microWakeWord Personal Recorder</h2>
-          <p class="muted">Enter a wake word, test TTS pronunciation, then record takes. Recording starts when you speak and stops after silence.</p>
+          <h2 id="pageTitle">🎙️ microWakeWord Personal Recorder</h2>
+          <p class="muted" id="pageSubtitle">Enter a wake word, test TTS pronunciation, then record takes. Recording starts when you speak and stops after silence.</p>
         </div>
       </div>
     </div>
@@ -182,9 +182,9 @@
       <div class="row">
         <input id="phrase" type="text" placeholder='e.g. "tater totterson"' />
         <select id="langSelect" title="Language">
-          <option value="auto">Auto</option>
-          <option value="en">English</option>
-          <option value="ru">Русский</option>
+          <option id="langAutoOpt" value="auto">Auto</option>
+          <option id="langEnOpt" value="en">English</option>
+          <option id="langRuOpt" value="ru">Русский</option>
         </select>
         <button id="startSessionBtn" class="primary">Start session</button>
         <button id="ttsBtn" disabled>🔊 Test TTS</button>
@@ -192,30 +192,30 @@
       </div>
 
       <div class="row" style="margin-top:10px;">
-        <label class="muted">Speakers
+        <label class="muted"><span id="labelSpeakers">Speakers</span>
           <input id="speakersTotal" type="number" min="1" max="10" value="1" />
         </label>
-        <label class="muted">Takes / speaker
+        <label class="muted"><span id="labelTakesPerSpeaker">Takes / speaker</span>
           <input id="takesPerSpeaker" type="number" min="1" max="50" value="10" />
         </label>
         <span id="speakerPill" class="pill">Speaker: -</span>
       </div>
 
       <details>
-        <summary>Advanced (if it’s too sensitive / not sensitive enough)</summary>
+        <summary id="advancedSummary">Advanced (if it’s too sensitive / not sensitive enough)</summary>
         <div style="margin-top:10px;">
           <label>
-            Start sensitivity
+            <span id="labelStartSensitivity">Start sensitivity</span>
             <input id="startThresh" type="range" min="0.005" max="0.08" step="0.001" value="0.02" />
             <span id="startThreshVal" class="muted"></span>
           </label>
           <label>
-            Silence stop (ms)
+            <span id="labelSilenceStop">Silence stop (ms)</span>
             <input id="silenceMs" type="range" min="300" max="2000" step="50" value="900" />
             <span id="silenceMsVal" class="muted"></span>
           </label>
           <label>
-            Min take length (ms)
+            <span id="labelMinTakeLength">Min take length (ms)</span>
             <input id="minTakeMs" type="range" min="300" max="2000" step="50" value="650" />
             <span id="minTakeMsVal" class="muted"></span>
           </label>
@@ -239,12 +239,12 @@
       <div class="divider"></div>
 
       <p class="big">
-        Speaker: <b id="speakerNum">-</b> / <b id="speakerTotal">-</b>
+        <span id="speakerLabel">Speaker:</span> <b id="speakerNum">-</b> / <b id="speakerTotal">-</b>
         <span id="speakerState" class="pill">Waiting</span>
       </p>
 
       <p class="big">
-        Take: <b id="takeNum">0</b> / <b id="takeTotal">10</b>
+        <span id="takeLabel">Take:</span> <b id="takeNum">0</b> / <b id="takeTotal">10</b>
         <span id="takeState" class="pill">Not recording</span>
       </p>
 
@@ -252,13 +252,236 @@
 
       <div id="takesList" class="muted"></div>
 
-      <h4 style="margin-top: 18px; margin-bottom: 10px;">Training log</h4>
+      <h4 id="trainingLogTitle" style="margin-top: 18px; margin-bottom: 10px;">Training log</h4>
       <pre id="trainLog">(no training started)</pre>
     </div>
   </div>
 
 <script>
   const $ = (id) => document.getElementById(id);
+
+  const I18N = {
+    en: {
+      title: "microWakeWord Recorder",
+      page_title: "🎙️ microWakeWord Personal Recorder",
+      page_subtitle: "Enter a wake word, test TTS pronunciation, then record takes. Recording starts when you speak and stops after silence.",
+      phrase_placeholder: "e.g. \"tater totterson\"",
+      lang_title: "Language",
+      lang_auto: "Auto",
+      lang_en: "English",
+      lang_ru: "Russian",
+      start_session_btn: "Start session",
+      tts_btn: "🔊 Test TTS",
+      session_none: "No session",
+      label_speakers: "Speakers",
+      label_takes_per_speaker: "Takes / speaker",
+      speaker_pill_empty: "Speaker: -",
+      advanced_summary: "Advanced (if it’s too sensitive / not sensitive enough)",
+      label_start_sensitivity: "Start sensitivity",
+      label_silence_stop: "Silence stop (ms)",
+      label_min_take_length: "Min take length (ms)",
+      unit_ms: "ms",
+      begin_recording_btn: "🎬 Begin recording",
+      reset_recordings_btn: "🧹 Reset recordings",
+      start_training_btn: "🧠 Start training",
+      status_idle: "Idle",
+      meter_level: "Mic level",
+      speaker_label: "Speaker:",
+      take_label: "Take:",
+      speaker_state_waiting: "Waiting",
+      take_state_not_recording: "Not recording",
+      take_state_ready: "Ready",
+      takes_summary: "Recorded: {recorded}/{total}",
+      training_log: "Training log",
+      training_none: "(no training started)",
+      training_preparing: "(preparing…)\n",
+      training_waiting: "Waiting for training output…\n",
+      error_mic_not_available: "Microphone not available here. Use https:// (or http://localhost) to record.",
+      mic_stopped: "Mic stopped",
+      meter_level_rms: "Mic level (rms={rms})",
+      speaker_pill: "Speaker {current}/{total}",
+      speaker_state_current: "Speaker {current}/{total}",
+      speaker_state_complete: "Speaker {speaker} complete ✅",
+      speaker_state_all_done: "All speakers done ✅",
+      take_state_done: "Done",
+      take_state_paused: "Paused",
+      take_state_listening: "Listening…",
+      take_state_recording: "Recording…",
+      take_state_processing: "Processing…",
+      take_state_error: "Error",
+      status_uploading: "Uploading speaker {speaker} take {take}…",
+      status_saved: "Saved speaker {speaker} take {take}/{total}",
+      status_all_takes_recorded: "All takes recorded ✅",
+      status_ready_for_speaker: "Ready for speaker {speaker}. Click Begin recording.",
+      status_listening_say: "Listening… say the wake word now",
+      status_ready: "Ready",
+      status_loaded_existing: "Loaded existing recordings",
+      status_starting_session: "Starting…",
+      status_session_failed: "Session failed",
+      status_recordings_reset: "Recordings reset",
+      status_upload_failed: "Upload failed",
+      status_auto_training_start: "Auto-starting training…",
+      status_training_preparing: "Preparing training environment…",
+      status_training_running: "Training running…",
+      status_training_finished: "Training finished ✅",
+      status_training_ended: "Training ended (exit={code})",
+      status_auto_train_failed: "Auto-train failed",
+      status_train_failed: "Train failed",
+      takes_list_existing: "Existing recordings: {recorded}/{total}",
+      takes_list_saved: "Saved {take}/{takeTotal} takes for speaker {speaker}/{speakerTotal}",
+      session_ok: "Session: {safe_word}",
+      session_starting: "Starting…",
+      session_failed: "Session failed",
+      alert_phrase_required: "Enter a wake word phrase first.",
+      alert_upload_failed: "Upload failed: {message}",
+      alert_start_session_failed: "Start session failed: {message}",
+      alert_mic_permission_failed: "Mic permission failed: {message}",
+      alert_reset_failed: "Reset failed: {message}",
+      alert_train_failed: "Train failed: {message}",
+      alert_auto_train_failed: "Auto-start training failed: {message}",
+      alert_start_session_first: "Start a session first.",
+      confirm_no_personal_samples: "No personal voice samples recorded (0/{total}).\n\nTrain anyway WITHOUT personal voices?"
+    },
+    ru: {
+      title: "microWakeWord Рекордер",
+      page_title: "🎙️ Персональный рекордер microWakeWord",
+      page_subtitle: "Введите ключевую фразу, проверьте произношение TTS, затем записывайте тейки. Запись начинается, когда вы говорите, и останавливается после тишины.",
+      phrase_placeholder: "например, \"привет дом\"",
+      lang_title: "Язык",
+      lang_auto: "Авто",
+      lang_en: "Английский",
+      lang_ru: "Русский",
+      start_session_btn: "Начать сессию",
+      tts_btn: "🔊 Проверить TTS",
+      session_none: "Сессия не начата",
+      label_speakers: "Спикеры",
+      label_takes_per_speaker: "Записей / спикер",
+      speaker_pill_empty: "Спикер: -",
+      advanced_summary: "Дополнительно (слишком чувствительно / недостаточно чувствительно)",
+      label_start_sensitivity: "Чувствительность старта",
+      label_silence_stop: "Остановка по тишине (мс)",
+      label_min_take_length: "Мин. длина записи (мс)",
+      unit_ms: "мс",
+      begin_recording_btn: "🎬 Начать запись",
+      reset_recordings_btn: "🧹 Сбросить записи",
+      start_training_btn: "🧠 Начать обучение",
+      status_idle: "Ожидание",
+      meter_level: "Уровень микрофона",
+      speaker_label: "Спикер:",
+      take_label: "Тейк:",
+      speaker_state_waiting: "Ожидание",
+      take_state_not_recording: "Не записываем",
+      take_state_ready: "Готово",
+      takes_summary: "Записано: {recorded}/{total}",
+      training_log: "Лог обучения",
+      training_none: "(обучение не начиналось)",
+      training_preparing: "(подготовка…)\n",
+      training_waiting: "Ожидание вывода обучения…\n",
+      error_mic_not_available: "Микрофон недоступен. Используйте https:// (или http://localhost) для записи.",
+      mic_stopped: "Микрофон остановлен",
+      meter_level_rms: "Уровень микрофона (rms={rms})",
+      speaker_pill: "Спикер {current}/{total}",
+      speaker_state_current: "Спикер {current}/{total}",
+      speaker_state_complete: "Спикер {speaker} завершен ✅",
+      speaker_state_all_done: "Все спикеры завершены ✅",
+      take_state_done: "Готово",
+      take_state_paused: "Пауза",
+      take_state_listening: "Слушаю…",
+      take_state_recording: "Запись…",
+      take_state_processing: "Обработка…",
+      take_state_error: "Ошибка",
+      status_uploading: "Загрузка спикер {speaker} тейк {take}…",
+      status_saved: "Сохранено спикер {speaker} тейк {take}/{total}",
+      status_all_takes_recorded: "Все записи сделаны ✅",
+      status_ready_for_speaker: "Готово для спикера {speaker}. Нажмите \"Начать запись\".",
+      status_listening_say: "Слушаю… скажите ключевую фразу",
+      status_ready: "Готово",
+      status_loaded_existing: "Загружены существующие записи",
+      status_starting_session: "Запуск…",
+      status_session_failed: "Сессия не удалась",
+      status_recordings_reset: "Записи сброшены",
+      status_upload_failed: "Загрузка не удалась",
+      status_auto_training_start: "Автозапуск обучения…",
+      status_training_preparing: "Подготовка обучения…",
+      status_training_running: "Обучение запущено…",
+      status_training_finished: "Обучение завершено ✅",
+      status_training_ended: "Обучение завершено (код={code})",
+      status_auto_train_failed: "Автообучение не удалось",
+      status_train_failed: "Обучение не удалось",
+      takes_list_existing: "Имеются записи: {recorded}/{total}",
+      takes_list_saved: "Сохранено {take}/{takeTotal} для спикера {speaker}/{speakerTotal}",
+      session_ok: "Сессия: {safe_word}",
+      session_starting: "Запуск…",
+      session_failed: "Сессия не удалась",
+      alert_phrase_required: "Сначала введите ключевую фразу.",
+      alert_upload_failed: "Загрузка не удалась: {message}",
+      alert_start_session_failed: "Не удалось начать сессию: {message}",
+      alert_mic_permission_failed: "Не удалось получить доступ к микрофону: {message}",
+      alert_reset_failed: "Сброс не удался: {message}",
+      alert_train_failed: "Обучение не удалось: {message}",
+      alert_auto_train_failed: "Автозапуск обучения не удался: {message}",
+      alert_start_session_first: "Сначала начните сессию.",
+      confirm_no_personal_samples: "Личных голосовых примеров нет (0/{total}).\n\nПродолжить обучение БЕЗ личных голосов?"
+    }
+  };
+
+  function detectUiLang() {
+    const langs = (navigator.languages && navigator.languages.length)
+      ? navigator.languages
+      : [navigator.language || "en"];
+    const primary = String(langs[0] || "en").toLowerCase();
+    if (primary.startsWith("ru")) return "ru";
+    return "en";
+  }
+
+  let currentUiLang = detectUiLang();
+
+  function t(key, vars) {
+    const dict = I18N[currentUiLang] || I18N.en;
+    let str = dict[key] || I18N.en[key] || key;
+    if (vars) {
+      str = str.replace(/\{(\w+)\}/g, (m, k) => (
+        Object.prototype.hasOwnProperty.call(vars, k) ? String(vars[k]) : m
+      ));
+    }
+    return str;
+  }
+
+  function applyTranslations() {
+    document.documentElement.lang = currentUiLang;
+    document.title = t("title");
+    $("pageTitle").textContent = t("page_title");
+    $("pageSubtitle").textContent = t("page_subtitle");
+    $("phrase").placeholder = t("phrase_placeholder");
+    $("langSelect").title = t("lang_title");
+    $("langAutoOpt").textContent = t("lang_auto");
+    $("langEnOpt").textContent = t("lang_en");
+    $("langRuOpt").textContent = t("lang_ru");
+    $("startSessionBtn").textContent = t("start_session_btn");
+    $("ttsBtn").textContent = t("tts_btn");
+    $("sessionPill").textContent = t("session_none");
+    $("labelSpeakers").textContent = t("label_speakers");
+    $("labelTakesPerSpeaker").textContent = t("label_takes_per_speaker");
+    $("speakerPill").textContent = t("speaker_pill_empty");
+    $("advancedSummary").textContent = t("advanced_summary");
+    $("labelStartSensitivity").textContent = t("label_start_sensitivity");
+    $("labelSilenceStop").textContent = t("label_silence_stop");
+    $("labelMinTakeLength").textContent = t("label_min_take_length");
+    $("beginBtn").textContent = t("begin_recording_btn");
+    $("resetBtn").textContent = t("reset_recordings_btn");
+    $("trainBtn").textContent = t("start_training_btn");
+    $("status").textContent = t("status_idle");
+    $("meterText").textContent = t("meter_level");
+    $("speakerLabel").textContent = t("speaker_label");
+    $("takeLabel").textContent = t("take_label");
+    $("speakerState").textContent = t("speaker_state_waiting");
+    $("takeState").textContent = t("take_state_not_recording");
+    $("takesSummary").textContent = t("takes_summary", { recorded: 0, total: 0 });
+    $("trainingLogTitle").textContent = t("training_log");
+    $("trainLog").textContent = t("training_none");
+  }
+
+  applyTranslations();
 
   function setPill(el, text, cls) {
     el.className = "pill " + (cls || "");
@@ -345,8 +568,9 @@
 
   function updateAdvancedLabels() {
     $("startThreshVal").textContent = startThreshold().toFixed(3);
-    $("silenceMsVal").textContent = silenceStopMs() + "ms";
-    $("minTakeMsVal").textContent = minTakeMs() + "ms";
+    const msUnit = t("unit_ms");
+    $("silenceMsVal").textContent = silenceStopMs() + msUnit;
+    $("minTakeMsVal").textContent = minTakeMs() + msUnit;
   }
   ["startThresh","silenceMs","minTakeMs"].forEach(id => $(id).addEventListener("input", updateAdvancedLabels));
   updateAdvancedLabels();
@@ -356,14 +580,14 @@
     $("speakerTotal").textContent = String(speakersTotal);
     $("takeNum").textContent = String(currentTake);
     $("takeTotal").textContent = String(takesPerSpeaker);
-    setPill($("speakerPill"), `Speaker ${currentSpeaker}/${speakersTotal}`);
+    setPill($("speakerPill"), t("speaker_pill", { current: currentSpeaker, total: speakersTotal }));
   }
 
   function updateTakesSummary() {
     const el = $("takesSummary");
     if (!el) return;
     const total = speakersTotal * takesPerSpeaker;
-    el.textContent = `Recorded: ${takesReceived}/${total}`;
+    el.textContent = t("takes_summary", { recorded: takesReceived, total });
   }
 
   function parseTakeFilename(name) {
@@ -421,7 +645,10 @@
     updateTakesSummary();
 
     if (takesReceived > 0) {
-      $("takesList").textContent = `Existing recordings: ${takesReceived}/${speakersTotal * takesPerSpeaker}`;
+      $("takesList").textContent = t("takes_list_existing", {
+        recorded: takesReceived,
+        total: speakersTotal * takesPerSpeaker
+      });
     } else {
       $("takesList").textContent = "";
     }
@@ -432,7 +659,7 @@
   // -------------------- mic lifecycle --------------------
   async function ensureMic() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      throw new Error("Microphone not available here. Use https:// (or http://localhost) to record.");
+      throw new Error(t("error_mic_not_available"));
     }
     if (stream) return;
     stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
@@ -469,7 +696,7 @@
     source = null;
 
     $("meterFill").style.width = "0%";
-    $("meterText").textContent = "Mic stopped";
+    $("meterText").textContent = t("mic_stopped");
   }
 
   function meterLoop() {
@@ -489,7 +716,7 @@
     const rms = Math.sqrt(sumSq / data.length);
     const pct = Math.min(100, Math.max(0, rms * 600));
     $("meterFill").style.width = pct + "%";
-    $("meterText").textContent = `Mic level (rms=${rms.toFixed(3)})`;
+    $("meterText").textContent = t("meter_level_rms", { rms: rms.toFixed(3) });
 
     if (isRunning) recorderTick(rms);
 
@@ -524,7 +751,7 @@
     silenceStart = null;
     floatChunks = [];
 
-    setPill($("takeState"), "Recording…", "warn");
+    setPill($("takeState"), t("take_state_recording"), "warn");
 
     const proc = audioCtx.createScriptProcessor(frameSize, 1, 1);
     source.connect(proc);
@@ -541,7 +768,7 @@
 
   async function stopCaptureAndUpload() {
     capturing = false;
-    setPill($("takeState"), "Processing…");
+    setPill($("takeState"), t("take_state_processing"));
 
     const proc = window.__mw_proc;
     if (proc) {
@@ -562,7 +789,10 @@
     const wavBlob = await floatToWav16kMono(merged, audioCtx.sampleRate);
 
     try {
-      setPill($("status"), `Uploading speaker ${currentSpeaker} take ${currentTake}…`, "warn");
+      setPill($("status"), t("status_uploading", {
+        speaker: currentSpeaker,
+        take: currentTake
+      }), "warn");
 
       const fd = new FormData();
       fd.append("speaker_index", String(currentSpeaker));
@@ -577,14 +807,23 @@
       }
       updateTakesSummary();
 
-      $("takesList").textContent = `Saved ${currentTake}/${takesPerSpeaker} takes for speaker ${currentSpeaker}/${speakersTotal}`;
-      setPill($("status"), `Saved speaker ${currentSpeaker} take ${currentTake}/${takesPerSpeaker}`, "ok");
+      $("takesList").textContent = t("takes_list_saved", {
+        take: currentTake,
+        takeTotal: takesPerSpeaker,
+        speaker: currentSpeaker,
+        speakerTotal: speakersTotal
+      });
+      setPill($("status"), t("status_saved", {
+        speaker: currentSpeaker,
+        take: currentTake,
+        total: takesPerSpeaker
+      }), "ok");
 
       if (currentTake >= takesPerSpeaker) {
         if (currentSpeaker >= speakersTotal) {
-          setPill($("takeState"), "Done", "ok");
-          setPill($("speakerState"), "All speakers done ✅", "ok");
-          setPill($("status"), "All takes recorded ✅", "ok");
+          setPill($("takeState"), t("take_state_done"), "ok");
+          setPill($("speakerState"), t("speaker_state_all_done"), "ok");
+          setPill($("status"), t("status_all_takes_recorded"), "ok");
 
           await stopMicNow();
           await autoStartTraining();
@@ -595,9 +834,13 @@
         currentTake = 0;
         refreshUI();
 
-        setPill($("speakerState"), `Speaker ${currentSpeaker - 1} complete ✅`, "ok");
-        setPill($("takeState"), "Paused", "warn");
-        setPill($("status"), `Ready for speaker ${currentSpeaker}. Click Begin recording.`, "warn");
+        setPill($("speakerState"), t("speaker_state_complete", {
+          speaker: currentSpeaker - 1
+        }), "ok");
+        setPill($("takeState"), t("take_state_paused"), "warn");
+        setPill($("status"), t("status_ready_for_speaker", {
+          speaker: currentSpeaker
+        }), "warn");
 
         isRunning = false;
         $("beginBtn").disabled = false;
@@ -606,16 +849,19 @@
         return;
       }
 
-      setPill($("speakerState"), `Speaker ${currentSpeaker}/${speakersTotal}`);
-      setPill($("takeState"), "Listening…", "ok");
+      setPill($("speakerState"), t("speaker_state_current", {
+        current: currentSpeaker,
+        total: speakersTotal
+      }));
+      setPill($("takeState"), t("take_state_listening"), "ok");
 
     } catch (e) {
       console.error(e);
-      setPill($("status"), "Upload failed", "err");
-      setPill($("takeState"), "Error", "err");
+      setPill($("status"), t("status_upload_failed"), "err");
+      setPill($("takeState"), t("take_state_error"), "err");
       isRunning = false;
       $("beginBtn").disabled = false;
-      alert("Upload failed: " + e.message);
+      alert(t("alert_upload_failed", { message: e.message }));
     }
   }
 
@@ -684,9 +930,7 @@
     let allowNoPersonal = false;
 
     if (takesReceived === 0) {
-      const ok = confirm(
-        `No personal voice samples recorded (0/${total}).\n\nTrain anyway WITHOUT personal voices?`
-      );
+      const ok = confirm(t("confirm_no_personal_samples", { total }));
       if (!ok) return;
       allowNoPersonal = true;
     }
@@ -696,7 +940,7 @@
     $("beginBtn").disabled = true;
     $("resetBtn").disabled = true;
 
-    setPill($("status"), auto ? "Auto-starting training…" : "Preparing training environment…", "warn");
+    setPill($("status"), auto ? t("status_auto_training_start") : t("status_training_preparing"), "warn");
 
     // Reset log state for a fresh run
     trainingPollAbort = false;
@@ -705,7 +949,7 @@
     seenAnyOutput = false;
 
     const logEl = $("trainLog");
-    logEl.textContent = "(preparing…)\n";
+    logEl.textContent = t("training_preparing");
 
     try {
       // Kick off training first
@@ -721,7 +965,7 @@
         pollTrainingTail();
       }
 
-      setPill($("status"), "Training running…", "warn");
+      setPill($("status"), t("status_training_running"), "warn");
     } catch (e) {
       $("trainBtn").disabled = false;
       $("resetBtn").disabled = false;
@@ -737,8 +981,8 @@
       await startTrainingWithPrompt(true);
     } catch (e) {
       console.error(e);
-      setPill($("status"), "Auto-train failed", "err");
-      alert("Auto-start training failed: " + e.message);
+      setPill($("status"), t("status_auto_train_failed"), "err");
+      alert(t("alert_auto_train_failed", { message: e.message }));
     }
   }
 
@@ -746,8 +990,8 @@
     try {
       await startTrainingWithPrompt(false);
     } catch (e) {
-      alert("Train failed: " + e.message);
-      setPill($("status"), "Train failed", "err");
+      alert(t("alert_train_failed", { message: e.message }));
+      setPill($("status"), t("status_train_failed"), "err");
     }
   });
 
@@ -786,8 +1030,10 @@
         } else {
           // before first output, show waiting message but do NOT overwrite later scrollback
           if (!seenAnyOutput) {
-            if (!logEl.textContent || logEl.textContent.includes("(no training") || logEl.textContent.startsWith("(preparing…")) {
-              logEl.textContent = "Waiting for training output…\n";
+            const noTrainingText = t("training_none");
+            const preparingText = t("training_preparing").trimEnd();
+            if (!logEl.textContent || logEl.textContent === noTrainingText || logEl.textContent.startsWith(preparingText)) {
+              logEl.textContent = t("training_waiting");
             }
           }
         }
@@ -799,8 +1045,8 @@
           $("resetBtn").disabled = false;
           $("beginBtn").disabled = false;
 
-          if (tr.exit_code === 0) setPill($("status"), "Training finished ✅", "ok");
-          else setPill($("status"), `Training ended (exit=${tr.exit_code})`, "err");
+          if (tr.exit_code === 0) setPill($("status"), t("status_training_finished"), "ok");
+          else setPill($("status"), t("status_training_ended", { code: tr.exit_code }), "err");
 
           trainingPollRunning = false;
           break;
@@ -826,13 +1072,13 @@
 
   $("startSessionBtn").addEventListener("click", async () => {
     const phrase = ($("phrase").value || "").trim();
-    if (!phrase) { alert("Enter a wake word phrase first."); return; }
+    if (!phrase) { alert(t("alert_phrase_required")); return; }
 
     speakersTotal = parseInt($("speakersTotal").value || "1", 10);
     takesPerSpeaker = parseInt($("takesPerSpeaker").value || "10", 10);
 
     try {
-      setPill($("sessionPill"), "Starting…", "warn");
+      setPill($("sessionPill"), t("session_starting"), "warn");
       const data = await api("/api/start_session", {
         method: "POST",
         headers: {"Content-Type":"application/json"},
@@ -855,7 +1101,7 @@
         updateTakesSummary();
       }
 
-      $("trainLog").textContent = "(no training started)";
+      $("trainLog").textContent = t("training_none");
 
       // Stop any previous poll loop cleanly
       trainingPollAbort = true;
@@ -866,30 +1112,33 @@
 
       await stopMicNow();
 
-      setPill($("sessionPill"), `Session: ${data.safe_word}`, "ok");
+      setPill($("sessionPill"), t("session_ok", { safe_word: data.safe_word }), "ok");
       $("beginBtn").disabled = false;
       $("resetBtn").disabled = false;
       $("trainBtn").disabled = false;
       $("ttsBtn").disabled = false;
 
-      setPill($("status"), "Ready", "ok");
-      setPill($("speakerState"), "Waiting");
-      setPill($("takeState"), "Not recording");
+      setPill($("status"), t("status_ready"), "ok");
+      setPill($("speakerState"), t("speaker_state_waiting"));
+      setPill($("takeState"), t("take_state_not_recording"));
 
       if (progress && progress.done) {
         $("beginBtn").disabled = true;
-        setPill($("status"), "All takes recorded ✅", "ok");
-        setPill($("speakerState"), "All speakers done ✅", "ok");
-        setPill($("takeState"), "Done", "ok");
+        setPill($("status"), t("status_all_takes_recorded"), "ok");
+        setPill($("speakerState"), t("speaker_state_all_done"), "ok");
+        setPill($("takeState"), t("take_state_done"), "ok");
       } else if (takesReceived > 0) {
-        setPill($("status"), "Loaded existing recordings", "ok");
-        setPill($("speakerState"), `Speaker ${currentSpeaker}/${speakersTotal}`);
-        setPill($("takeState"), "Ready", "ok");
+        setPill($("status"), t("status_loaded_existing"), "ok");
+        setPill($("speakerState"), t("speaker_state_current", {
+          current: currentSpeaker,
+          total: speakersTotal
+        }));
+        setPill($("takeState"), t("take_state_ready"), "ok");
       }
     } catch (e) {
       console.error(e);
-      setPill($("sessionPill"), "Session failed", "err");
-      alert("Start session failed: " + e.message);
+      setPill($("sessionPill"), t("session_failed"), "err");
+      alert(t("alert_start_session_failed", { message: e.message }));
     } finally {
       // allow a new poll loop to start later
       trainingPollAbort = false;
@@ -905,18 +1154,18 @@
       $("takesList").textContent = "";
       refreshUI();
       updateTakesSummary();
-      setPill($("status"), "Recordings reset", "ok");
+      setPill($("status"), t("status_recordings_reset"), "ok");
     } catch (e) {
-      alert("Reset failed: " + e.message);
+      alert(t("alert_reset_failed", { message: e.message }));
     }
   });
 
   $("beginBtn").addEventListener("click", async () => {
-    if (!session) { alert("Start a session first."); return; }
+    if (!session) { alert(t("alert_start_session_first")); return; }
     try {
       await ensureMic();
     } catch (e) {
-      alert("Mic permission failed: " + e.message);
+      alert(t("alert_mic_permission_failed", { message: e.message }));
       return;
     }
 
@@ -926,9 +1175,12 @@
     isRunning = true;
     $("beginBtn").disabled = true;
 
-    setPill($("speakerState"), `Speaker ${currentSpeaker}/${speakersTotal}`);
-    setPill($("status"), "Listening… say the wake word now", "ok");
-    setPill($("takeState"), "Listening…", "ok");
+    setPill($("speakerState"), t("speaker_state_current", {
+      current: currentSpeaker,
+      total: speakersTotal
+    }));
+    setPill($("status"), t("status_listening_say"), "ok");
+    setPill($("takeState"), t("take_state_listening"), "ok");
   });
 </script>
 </body>
