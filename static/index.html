@@ -534,7 +534,7 @@
     return sel === "auto" ? detectLang(phrase) : sel;
   }
 
-  const PUNCT_RE = /[^A-Za-z0-9\\sА-Яа-яЁё]/;
+  const PUNCT_RE = /[^A-Za-z0-9\sА-Яа-яЁё]/;
 
   function hasPunctuation(phrase) {
     return PUNCT_RE.test(phrase || "");
