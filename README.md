@@ -66,7 +66,7 @@ Training itself works fine remotely — only recording requires local microphone
 
 ### 🎙️ Recording Flow
 
-1. Enter your wake word
+1. Enter your wake word (avoid punctuation in the phrase)
 2. Test pronunciation with **Test TTS**
 3. Choose:
    - Number of speakers (e.g. family members)

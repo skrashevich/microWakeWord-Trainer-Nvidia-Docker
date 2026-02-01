@@ -191,6 +191,9 @@
         <span id="sessionPill" class="pill">No session</span>
       </div>
 
+      <p class="muted" id="phraseHint" style="margin-top:8px;">Avoid punctuation in the wake-word phrase.</p>
+      <p class="muted" id="phraseWarn" style="margin-top:6px; display:none; color: var(--warn);">Warning: punctuation detected. Use only letters and spaces.</p>
+
       <div class="row" style="margin-top:10px;">
         <label class="muted"><span id="labelSpeakers">Speakers</span>
           <input id="speakersTotal" type="number" min="1" max="10" value="1" />
@@ -266,6 +269,8 @@
       page_title: "🎙️ microWakeWord Personal Recorder",
       page_subtitle: "Enter a wake word, test TTS pronunciation, then record takes. Recording starts when you speak and stops after silence.",
       phrase_placeholder: "e.g. \"tater totterson\"",
+      phrase_hint: "Avoid punctuation in the wake-word phrase.",
+      phrase_warn: "Warning: punctuation detected. Use only letters and spaces.",
       lang_title: "Language",
       lang_auto: "Auto",
       lang_en: "English",
@@ -347,6 +352,8 @@
       page_title: "🎙️ Персональный рекордер microWakeWord",
       page_subtitle: "Введите ключевую фразу, проверьте произношение TTS, затем записывайте тейки. Запись начинается, когда вы говорите, и останавливается после тишины.",
       phrase_placeholder: "например, \"привет дом\"",
+      phrase_hint: "Избегайте знаков препинания в ключевой фразе.",
+      phrase_warn: "Предупреждение: обнаружены знаки препинания. Используйте только буквы и пробелы.",
       lang_title: "Язык",
       lang_auto: "Авто",
       lang_en: "Английский",
@@ -453,6 +460,8 @@
     $("pageTitle").textContent = t("page_title");
     $("pageSubtitle").textContent = t("page_subtitle");
     $("phrase").placeholder = t("phrase_placeholder");
+    $("phraseHint").textContent = t("phrase_hint");
+    $("phraseWarn").textContent = t("phrase_warn");
     $("langSelect").title = t("lang_title");
     $("langAutoOpt").textContent = t("lang_auto");
     $("langEnOpt").textContent = t("lang_en");
@@ -479,9 +488,8 @@
     $("takesSummary").textContent = t("takes_summary", { recorded: 0, total: 0 });
     $("trainingLogTitle").textContent = t("training_log");
     $("trainLog").textContent = t("training_none");
+    updatePhraseWarnings();
   }
-
-  applyTranslations();
 
   function setPill(el, text, cls) {
     el.className = "pill " + (cls || "");
@@ -525,6 +533,20 @@
     const sel = ($("langSelect").value || "auto").toLowerCase();
     return sel === "auto" ? detectLang(phrase) : sel;
   }
+
+  const PUNCT_RE = /[^A-Za-z0-9\\sА-Яа-яЁё]/;
+
+  function hasPunctuation(phrase) {
+    return PUNCT_RE.test(phrase || "");
+  }
+
+  function updatePhraseWarnings() {
+    const phrase = ($("phrase").value || "").trim();
+    const warn = phrase && hasPunctuation(phrase);
+    $("phraseWarn").style.display = warn ? "block" : "none";
+  }
+
+  applyTranslations();
 
   let session = null;
   let isRunning = false;
@@ -1060,6 +1082,8 @@
   }
 
   // -------------------- session + UI wiring --------------------
+  $("phrase").addEventListener("input", updatePhraseWarnings);
+
   $("ttsBtn").addEventListener("click", () => {
     const phrase = ($("phrase").value || "").trim();
     if (!phrase) return;
@@ -1073,6 +1097,7 @@
   $("startSessionBtn").addEventListener("click", async () => {
     const phrase = ($("phrase").value || "").trim();
     if (!phrase) { alert(t("alert_phrase_required")); return; }
+    if (hasPunctuation(phrase)) { alert(t("phrase_warn")); }
 
     speakersTotal = parseInt($("speakersTotal").value || "1", 10);
     takesPerSpeaker = parseInt($("takesPerSpeaker").value || "10", 10);
