@@ -50,7 +50,7 @@ for ds in "${NEGATIVE_DATASETS[@]}" ; do
 
     if [ ! -f "${AUDIO_ZIP}" ] ; then
         echo "   Downloading ${AUDIO_ZIPFILE}"
-        curl -sfL "${NEGATIVE_DATASET_URL}/${ds}.zip" -o "${AUDIO_ZIP}"
+        wcurl --curl-options="-s --clobber --continue-at -" "${NEGATIVE_DATASET_URL}/${ds}.zip" -o "${AUDIO_ZIP}"
     fi
 
     rm -rf "${AUDIO_DIR}" || :

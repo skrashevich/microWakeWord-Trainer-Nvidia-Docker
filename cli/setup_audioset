@@ -60,7 +60,7 @@ find_rev() {
     for rev in "${REV_CANDIDATES[@]}" ; do
         for pattern in "${TAR_PATTERNS[@]}" ; do
             url="https://huggingface.co/datasets/agkphysics/AudioSet/resolve/${rev}/${pattern}0.tar"
-            curl -I -L --fail -s "${url}" > /dev/null && echo "${rev},${pattern}"
+            wcurl --curl-options="-s --clobber --continue-at -" "${url}" > /dev/null && echo "${rev},${pattern}"
         done
     done
     echo ""
@@ -149,7 +149,7 @@ else
         if [ ! -f "${fname}" ] ; then
             echo "   Downloading bal_train0${i}.tar"
             url="${AUDIO_URL}/${rev}/${pattern}${i}.tar"
-            curl -L -s --fail "${url}" -o "${fname}" || { echo "Could not fetch ${fname} at rev ${rev}; continuing." ; continue ; }
+            wcurl --curl-options="-s --clobber --continue-at -" "${url}" -o "${fname}" || { echo "Could not fetch ${fname} at rev ${rev}; continuing." ; continue ; }
         fi
 
         tarball_filecount=$(tar -tvf "${fname}" | wc -l )

@@ -10,6 +10,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /data
 
+ADD --chmod=0755 https://github.com/curl/wcurl/releases/latest/download/wcurl /usr/local/bin/wcurl
+
 # Recorder port
 EXPOSE 8789
 

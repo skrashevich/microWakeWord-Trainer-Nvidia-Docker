@@ -88,7 +88,7 @@ else
     if [ "${actual_filecount}" -eq 0 ] || [ "${actual_filecount}" -ne "${expected_filecount}" ] ; then
         if [ ! -f "${AUDIO_ZIP}" ]  ; then
             echo "   Downloading ${AUDIO_ZIPFILE}"
-            curl -sfL "${AUDIO_URL}" -o "${AUDIO_ZIP}"
+            wcurl --curl-options="-s --clobber --continue-at -" "${AUDIO_URL}" -o "${AUDIO_ZIP}"
         fi
 
         rm -rf "${AUDIO_DIR}" || :
